@@ -160,6 +160,11 @@ input,textarea,select,button{font-family:inherit;font-size:16px}
     <div id="pt-list"></div>
     <div id="sidebar-footer">
       <button class="btn-new" id="btn-new-pt">＋ Nuovo Paziente</button>
+      <div style="display:flex;gap:7px">
+        <button class="btn-reset" id="btn-export" style="flex:1;color:#4FC3B0;border-color:rgba(79,195,176,.4)">⬇ Backup</button>
+        <button class="btn-reset" id="btn-import-trigger" style="flex:1;color:#4FC3B0;border-color:rgba(79,195,176,.4)">⬆ Ripristina</button>
+        <input type="file" id="btn-import" accept=".json" style="display:none"/>
+      </div>
       <button class="btn-reset" id="btn-reset">Ripristina demo</button>
     </div>
   </div>
@@ -478,10 +483,39 @@ function saveSession(){
 
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 
+function exportBackup(){
+  const date=new Date().toISOString().slice(0,10);
+  const blob=new Blob([JSON.stringify(patients,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download='fisioterapia-backup-'+date+'.json';
+  document.body.appendChild(a);a.click();
+  document.body.removeChild(a);URL.revokeObjectURL(url);
+}
+
+function importBackup(file){
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const data=JSON.parse(e.target.result);
+      if(!Array.isArray(data))throw new Error();
+      if(!confirm('Importare '+data.length+' pazienti? I dati attuali verranno sostituiti.'))return;
+      patients=data;selId=patients[0]?.id||null;curView=selId?'chat':'empty';
+      save();renderAll();
+      alert('✅ Backup ripristinato con successo!');
+    }catch(err){alert('❌ File non valido. Assicurati di usare un backup esportato da questa app.')}
+  };
+  reader.readAsText(file);
+}
+
 // Events
 document.getElementById('search').addEventListener('input',renderSidebar);
 document.getElementById('btn-new-pt').onclick=startNewPatient;
 document.getElementById('btn-reset').onclick=()=>{if(!confirm('Ripristinare il paziente demo?'))return;patients=JSON.parse(JSON.stringify(DEMO));selId=DEMO[0].id;curView='chat';save();renderAll()};
+document.getElementById('btn-export').onclick=exportBackup;
+document.getElementById('btn-import-trigger').onclick=()=>document.getElementById('btn-import').click();
+document.getElementById('btn-import').onchange=e=>importBackup(e.target.files[0]);
 document.getElementById('btn-hamburger').onclick=openSidebar;
 document.getElementById('overlay').onclick=closeSidebar;
 document.getElementById('btn-collapse').onclick=()=>{sidebarCollapsed=true;document.getElementById('sidebar').classList.add('collapsed');document.getElementById('btn-expand').style.display=''};
