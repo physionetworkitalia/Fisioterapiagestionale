@@ -143,9 +143,11 @@ input,textarea,select,button{font-family:inherit;font-size:16px}
 /* EMPTY */
 #empty{flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:#9AA3B0}
 .saved-badge{font-size:10px;background:#4FC3B0;color:#fff;padding:2px 7px;border-radius:10px;margin-left:auto;font-weight:600}
+#login{display:none;position:fixed;inset:0;z-index:200;background:#1A3A5C;align-items:center;justify-content:center;padding:20px}.login-box{background:#fff;border-radius:16px;padding:24px;width:100%;max-width:360px;display:flex;flex-direction:column;gap:10px;text-align:center}.login-box p{font-size:13px;color:#6B7A8D}#login-msg{color:#C0392B;font-size:13px;min-height:16px}
 </style>
 </head>
 <body>
+<div id="login"><div class="login-box"><div style="font-size:40px">🦴</div><h2 style="color:#1A3A5C">Fisioterapia</h2><p>Accedi per sincronizzare i dati su iPhone e PC</p><input class="inp" id="login-email" type="email" placeholder="Email" autocomplete="username"/><input class="inp" id="login-pass" type="password" placeholder="Password (min. 6 caratteri)" autocomplete="current-password"/><div id="login-msg"></div><button class="btn-save" id="btn-login" style="width:100%;flex:none">Accedi</button><button class="btn-cancel" id="btn-signup" style="width:100%;flex:none">Crea account (solo la prima volta)</button></div></div>
 <div id="app">
   <div id="sidebar">
     <div id="sidebar-header">
@@ -165,7 +167,7 @@ input,textarea,select,button{font-family:inherit;font-size:16px}
         <button class="btn-reset" id="btn-import-trigger" style="flex:1;color:#4FC3B0;border-color:rgba(79,195,176,.4)">⬆ Ripristina</button>
         <input type="file" id="btn-import" accept=".json" style="display:none"/>
       </div>
-      <button class="btn-reset" id="btn-reset">Ripristina demo</button>
+      <button class="btn-reset" id="btn-reset">Esci dall'account</button>
     </div>
   </div>
 
@@ -231,8 +233,47 @@ input,textarea,select,button{font-family:inherit;font-size:16px}
   </nav>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
 const KEY='fisio_v3';
+const FB={apiKey:"AIzaSyDQnD3Rkj9k5m_bCOnIZZay2ea1SRJTdJk",authDomain:"fisioterapia-panico.firebaseapp.com",projectId:"fisioterapia-panico",storageBucket:"fisioterapia-panico.firebasestorage.app",messagingSenderId:"991105371365",appId:"1:991105371365:web:3777a8f8ef95821ea7580c"};
+let db=null,auth=null,user=null,unsub=null,firstSnap=true;
+try{firebase.initializeApp(FB);auth=firebase.auth();db=firebase.firestore();db.enablePersistence({synchronizeTabs:true}).catch(()=>{})}catch(e){console.error(e)}
+function colRef(){return db.collection('users').doc(user.uid).collection('pazienti')}
+function push(p){save();if(db&&user)colRef().doc(String(p.id)).set(JSON.parse(JSON.stringify(p))).catch(e=>alert('Errore di sincronizzazione: '+e.message))}
+function removeRemote(id){if(db&&user)colRef().doc(String(id)).delete().catch(e=>alert('Errore: '+e.message))}
+function loadLocal(){try{const r=localStorage.getItem(KEY);if(r)return JSON.parse(r)}catch(e){}return[]}
+function showLogin(m){document.getElementById('login').style.display='flex';document.getElementById('login-msg').textContent=m||''}
+function hideLogin(){document.getElementById('login').style.display='none'}
+function doAuth(create){
+  const e=document.getElementById('login-email').value.trim(),p=document.getElementById('login-pass').value;
+  if(!e||!p)return showLogin('Inserisci email e password');
+  (create?auth.createUserWithEmailAndPassword(e,p):auth.signInWithEmailAndPassword(e,p)).catch(err=>{
+    const m={'auth/invalid-credential':'Email o password errate','auth/wrong-password':'Password errata','auth/user-not-found':'Account inesistente: usa "Crea account"','auth/email-already-in-use':'Email già registrata: usa "Accedi"','auth/weak-password':'Password troppo corta (min. 6 caratteri)','auth/invalid-email':'Email non valida','auth/operation-not-allowed':'Abilita Email/Password in Firebase → Authentication','auth/network-request-failed':'Nessuna connessione'};
+    showLogin(m[err.code]||err.message)});
+}
+function logout(){if(!auth){alert('Modalità solo locale');return}if(confirm('Uscire dall\'account?'))auth.signOut()}
+function startSync(){
+  firstSnap=true;
+  unsub=colRef().onSnapshot(snap=>{
+    let cloud=snap.docs.map(d=>d.data());
+    if(firstSnap&&!snap.metadata.fromCache){
+      firstSnap=false;
+      const local=loadLocal();
+      if(!cloud.length&&local.length&&!localStorage.getItem('fisio_migrated')&&confirm('Sul cloud non ci sono ancora pazienti. Caricare i '+local.length+' pazienti salvati su questo dispositivo?')){local.forEach(push);cloud=local}
+      localStorage.setItem('fisio_migrated','1');
+    }
+    cloud.sort((a,b)=>(a.cognome+a.nome).localeCompare(b.cognome+b.nome));
+    patients=cloud;
+    if(!patients.find(p=>p.id===selId)){selId=patients[0]?.id||null;curView=selId?'chat':'empty'}
+    save();
+    const busy=document.getElementById('session-form').style.display==='flex'||document.getElementById('pt-form').style.display==='block';
+    busy?renderSidebar():renderAll();
+  },err=>alert('Errore di sincronizzazione: '+err.message));
+}
+
 const ST={
   valutazione:{label:'Valutazione',color:'#2C5F8A',bg:'#E5EFF7',icon:'📋'},
   seduta:{label:'Seduta',color:'#2E7D5E',bg:'#E4F4EE',icon:'🙌'},
@@ -251,7 +292,6 @@ const DEMO=[{id:1,nome:'Laura',cognome:'Bianchi',dataNascita:'1980-06-24',codice
 
 let patients=[], selId=null, curView='empty', sessType='seduta', sidebarCollapsed=false;
 
-function load(){try{const r=localStorage.getItem(KEY);if(r)return JSON.parse(r)}catch(e){}return JSON.parse(JSON.stringify(DEMO))}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(patients));showSaved()}catch(e){}}
 function showSaved(){const b=document.getElementById('saved-badge');b.style.display='';setTimeout(()=>b.style.display='none',1500)}
 function fmtDate(iso){const d=new Date(iso);return d.toLocaleDateString('it-IT',{day:'2-digit',month:'short',year:'numeric'})+' '+d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}
@@ -273,7 +313,7 @@ function closeSidebar(){
 
 function renderSidebar(){
   const search=document.getElementById('search').value.toLowerCase();
-  document.getElementById('sidebar-sub').textContent=patients.length+' pazienti • dati salvati';
+  document.getElementById('sidebar-sub').textContent=patients.length+' pazienti • '+(user?user.email:'solo locale');
   const list=document.getElementById('pt-list');
   const filtered=patients.filter(p=>(p.cognome+' '+p.nome).toLowerCase().includes(search)||( p.patologia||'').toLowerCase().includes(search));
   list.innerHTML=filtered.map(p=>{
@@ -456,17 +496,17 @@ function startNewPatient(){curView='new-patient';renderPtForm(null);document.get
 function cancelNew(){curView=selId?'chat':'empty';renderMain()}
 function saveNewPatient(){
   const d=getFormData();if(!d.cognome||!d.nome)return alert('Inserisci nome e cognome');
-  const p={...d,id:Date.now(),sessioni:[]};patients.push(p);selId=p.id;curView='chat';save();renderAll();
+  const p={...d,id:Date.now(),sessioni:[]};patients.push(p);selId=p.id;curView='chat';push(p);renderAll();
 }
 function startEditPatient(){const p=patients.find(x=>x.id===selId);document.getElementById('scheda').style.display='none';renderPtForm(p);document.getElementById('pt-form').style.display='block'}
 function cancelEdit(){document.getElementById('pt-form').style.display='none';curView='anagrafica';renderMain()}
 function saveEditPatient(){
   const d=getFormData();const i=patients.findIndex(x=>x.id===selId);if(i<0)return;
-  patients[i]={...patients[i],...d};save();curView='anagrafica';renderAll();
+  patients[i]={...patients[i],...d};push(patients[i]);curView='anagrafica';renderAll();
 }
 function delPatient(id){
   if(!confirm('Eliminare questo paziente e tutte le sessioni?'))return;
-  patients=patients.filter(p=>p.id!==id);
+  removeRemote(id);patients=patients.filter(p=>p.id!==id);
   selId=patients[0]?.id||null;curView=selId?'chat':'empty';save();renderAll();
 }
 
@@ -476,7 +516,7 @@ function saveSession(){
   const p=patients.find(x=>x.id===selId);if(!p)return;
   const n=sessType==='seduta'?countS(p.sessioni)+1:null;
   p.sessioni.push({id:Date.now(),data:new Date().toISOString(),tipo:sessType,titolo,testo,numeroseduta:n});
-  save();document.getElementById('sess-title').value='';document.getElementById('sess-text').value='';
+  push(p);document.getElementById('sess-title').value='';document.getElementById('sess-text').value='';
   document.getElementById('session-form').style.display='none';document.getElementById('btn-show-form').style.display='';
   renderDiario(p);
 }
@@ -500,8 +540,8 @@ function importBackup(file){
     try{
       const data=JSON.parse(e.target.result);
       if(!Array.isArray(data))throw new Error();
-      if(!confirm('Importare '+data.length+' pazienti? I dati attuali verranno sostituiti.'))return;
-      patients=data;selId=patients[0]?.id||null;curView=selId?'chat':'empty';
+      if(!confirm('Importare '+data.length+' pazienti? I pazienti verranno aggiunti o aggiornati.'))return;
+      patients=data;data.forEach(push);selId=patients[0]?.id||null;curView=selId?'chat':'empty';
       save();renderAll();
       alert('✅ Backup ripristinato con successo!');
     }catch(err){alert('❌ File non valido. Assicurati di usare un backup esportato da questa app.')}
@@ -512,7 +552,7 @@ function importBackup(file){
 // Events
 document.getElementById('search').addEventListener('input',renderSidebar);
 document.getElementById('btn-new-pt').onclick=startNewPatient;
-document.getElementById('btn-reset').onclick=()=>{if(!confirm('Ripristinare il paziente demo?'))return;patients=JSON.parse(JSON.stringify(DEMO));selId=DEMO[0].id;curView='chat';save();renderAll()};
+document.getElementById('btn-reset').onclick=logout;
 document.getElementById('btn-export').onclick=exportBackup;
 document.getElementById('btn-import-trigger').onclick=()=>document.getElementById('btn-import').click();
 document.getElementById('btn-import').onchange=e=>importBackup(e.target.files[0]);
@@ -525,8 +565,12 @@ document.getElementById('btn-cancel-sess').onclick=()=>{document.getElementById(
 document.getElementById('btn-save-sess').onclick=saveSession;
 
 // Init
-patients=load();selId=patients[0]?.id||null;curView=selId?'chat':'empty';
-renderAll();
+if(auth){
+  document.getElementById('btn-login').onclick=()=>doAuth(false);
+  document.getElementById('btn-signup').onclick=()=>doAuth(true);
+  auth.onAuthStateChanged(u=>{user=u;if(unsub){unsub();unsub=null}
+    if(u){hideLogin();startSync()}else{patients=[];selId=null;curView='empty';renderAll();showLogin()}});
+}else{patients=loadLocal();selId=patients[0]?.id||null;curView=selId?'chat':'empty';renderAll()}
 </script>
 </body>
 </html>
