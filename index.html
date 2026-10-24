@@ -162,6 +162,7 @@ input,textarea,select,button{font-family:inherit;font-size:16px}
     <div id="pt-list"></div>
     <div id="sidebar-footer">
       <button class="btn-new" id="btn-new-pt">＋ Nuovo Paziente</button>
+      <button class="btn-reset" id="btn-debiti" style="color:#F59E0B;border-color:rgba(245,158,11,.5);font-size:14px;padding:10px">💰 Da incassare</button>
       <div style="display:flex;gap:7px">
         <button class="btn-reset" id="btn-export" style="flex:1;color:#4FC3B0;border-color:rgba(79,195,176,.4)">⬇ Backup</button>
         <button class="btn-reset" id="btn-import-trigger" style="flex:1;color:#4FC3B0;border-color:rgba(79,195,176,.4)">⬆ Ripristina</button>
@@ -223,6 +224,7 @@ input,textarea,select,button{font-family:inherit;font-size:16px}
     </div>
 
     <div id="scheda" style="display:none"></div>
+    <div id="debiti" style="display:none;flex:1;overflow-y:auto;padding:14px"></div>
     <div id="pt-form" style="display:none"></div>
     <div id="empty">
       <div style="font-size:48px">🦴</div>
@@ -321,6 +323,7 @@ function closeSidebar(){
 function renderSidebar(){
   const search=document.getElementById('search').value.toLowerCase();
   document.getElementById('sidebar-sub').textContent=patients.length+' pazienti • '+(user?user.email:'solo locale');
+  const nd=patients.filter(p=>saldo(p).residuo>0.004).length;document.getElementById('btn-debiti').textContent='💰 Da incassare'+(nd?' ('+nd+')':'');
   const list=document.getElementById('pt-list');
   const filtered=patients.filter(p=>(p.cognome+' '+p.nome).toLowerCase().includes(search)||( p.patologia||'').toLowerCase().includes(search));
   list.innerHTML=filtered.map(p=>{
@@ -365,9 +368,10 @@ function renderAll(){
 function renderMain(){
   const p=patients.find(x=>x.id===selId);
   // hide all views
-  ['diario','scheda','pt-form','empty'].forEach(id=>document.getElementById(id).style.display='none');
+  ['diario','scheda','pt-form','empty','debiti'].forEach(id=>document.getElementById(id).style.display='none');
   document.getElementById('pt-header').style.display='none';
   document.getElementById('mobile-topbar').querySelector('#btn-del-mobile').style.display='none';
+  if(curView==='debiti'){renderDebiti();return}
 
   if(curView==='new-patient'){
     renderPtForm(null);
@@ -542,6 +546,19 @@ function payLine(s){const g=s.pagamento;if(!g)return'';const r=(g.importo||0)-(g
   return `<div style="margin-top:8px;padding-top:7px;border-top:1px dashed #E2E6EC;font-size:12px;font-weight:600;color:${r>0.004?'#C0392B':'#2E7D5E'}">💶 ${g.importo?'Importo '+eur(g.importo)+' · ':''}${g.pagato?'Pagato':'Versato '+eur(g.versato||0)} (${esc(g.metodo||'')})${r>0.004?' · Residuo '+eur(r):''}</div>`}
 function resetPay(){['pay-importo','pay-acconto'].forEach(i=>document.getElementById(i).value='');document.getElementById('pay-full').checked=false;document.getElementById('pay-acconto').style.display=''}
 document.getElementById('pay-full').onchange=e=>{document.getElementById('pay-acconto').style.display=e.target.checked?'none':''};
+function renderDebiti(){
+  const el=document.getElementById('debiti');el.style.display='block';
+  document.getElementById('topbar-info').innerHTML='<div style="font-weight:700;font-size:15px">Da incassare</div>';
+  const rows=patients.map(p=>({p,r:Math.round(saldo(p).residuo*100)/100})).filter(x=>x.r>0).sort((a,b)=>b.r-a.r);
+  const tot=rows.reduce((a,x)=>a+x.r,0);
+  el.innerHTML='<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px"><button onclick="closeDebiti()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#1A3A5C">←</button><div style="font-weight:700;font-size:17px;color:#1A3A5C">💰 Da incassare</div></div>'+(rows.length?
+    `<div class="info-card" style="margin-bottom:12px;background:#FDECEC"><div class="info-label">Totale da incassare · ${rows.length} pazient${rows.length==1?'e':'i'}</div><div style="font-size:22px;font-weight:700;color:#C0392B">${eur(tot)}</div></div>`+
+    rows.map(x=>`<div class="info-card" style="display:flex;align-items:center;gap:10px;margin-bottom:8px;cursor:pointer" onclick="selectPatient(${x.p.id})"><div class="pt-header-avatar" style="width:36px;height:36px;font-size:13px">${initials(x.p)}</div><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14px">${esc(x.p.cognome+' '+x.p.nome)}</div><div style="font-size:12px;color:#9AA3B0">${esc(x.p.distretto||'')}</div></div><div style="font-weight:700;color:#C0392B;font-size:15px">${eur(x.r)}</div></div>`).join('')
+    :'<div style="text-align:center;color:#9AA3B0;margin-top:60px">Nessun pagamento in sospeso 🎉</div>');
+}
+function openDebiti(){curView='debiti';if(isMobile())closeSidebar();renderMain()}
+function closeDebiti(){curView=selId?'chat':'empty';renderMain()}
+document.getElementById('btn-debiti').onclick=openDebiti;
 function exportBackup(){
   const date=new Date().toISOString().slice(0,10);
   const blob=new Blob([JSON.stringify(patients,null,2)],{type:'application/json'});
