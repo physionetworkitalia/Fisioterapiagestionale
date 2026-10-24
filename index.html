@@ -191,6 +191,7 @@ input,textarea,select,button{font-family:inherit;font-size:16px}
       </div>
       <div id="tab-row">
         <span id="hdr-badge" class="badge" style="display:none"></span>
+        <span id="hdr-saldo" class="badge" style="display:none"></span>
         <button class="tab-btn active" id="tab-chat" onclick="switchView('chat')">📋 Diario</button>
         <button class="tab-btn" id="tab-anagrafica" onclick="switchView('anagrafica')">👤 Scheda</button>
         <button class="btn-del" id="btn-del-desktop">🗑</button>
@@ -207,6 +208,12 @@ input,textarea,select,button{font-family:inherit;font-size:16px}
           <div class="type-pills" id="type-pills"></div>
           <input class="inp" id="sess-title" placeholder="Titolo (opzionale)"/>
           <textarea class="inp" id="sess-text" rows="3" placeholder="Tecniche, NRS dolore, ROM, risposta del paziente…" style="resize:none"></textarea>
+          <div style="background:#F7F9FB;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px">
+            <div style="font-size:11px;font-weight:700;color:#6B7A8D;text-transform:uppercase">💶 Pagamento (opzionale)</div>
+            <div style="display:flex;gap:8px"><input class="inp" id="pay-importo" type="number" inputmode="decimal" placeholder="Importo €"/><select class="inp" id="pay-metodo" style="appearance:auto;-webkit-appearance:menulist"><option>Contanti</option><option>POS</option></select></div>
+            <label style="display:flex;align-items:center;gap:8px;font-size:15px"><input type="checkbox" id="pay-full" style="width:22px;height:22px"/> Pagato per intero</label>
+            <input class="inp" id="pay-acconto" type="number" inputmode="decimal" placeholder="Acconto versato € (se non pagato per intero)"/>
+          </div>
           <div class="form-btns">
             <button class="btn-cancel" id="btn-cancel-sess">Annulla</button>
             <button class="btn-save" id="btn-save-sess">Salva</button>
@@ -379,6 +386,8 @@ function renderMain(){
   document.getElementById('hdr-sub').textContent=[age(p.dataNascita),p.distretto,p.medicoInviante?'Inv. '+p.medicoInviante:''].filter(Boolean).join(' • ');
   const badge=document.getElementById('hdr-badge');
   if(p.sedutePrescritte){badge.style.display='';badge.textContent=countS(p.sessioni)+'/'+p.sedutePrescritte+' sedute'}else{badge.style.display='none'}
+  const sd=saldo(p),sbEl=document.getElementById('hdr-saldo'),rs=Math.round(sd.residuo*100)/100;
+  if(sd.dovuto||sd.versato){sbEl.style.display='';sbEl.textContent=rs>0?'💰 Residuo '+eur(rs):rs<0?'Credito '+eur(-rs):'✓ Saldato';sbEl.style.background=rs>0?'#FDECEC':'#E4F4EE';sbEl.style.color=rs>0?'#C0392B':'#2E7D5E'}else sbEl.style.display='none';
   document.getElementById('btn-del-desktop').onclick=()=>delPatient(p.id);
   document.getElementById('btn-del-mobile').style.display='';
   document.getElementById('btn-del-mobile').onclick=()=>delPatient(p.id);
@@ -410,7 +419,7 @@ function renderDiario(p){
         </div>
         <div class="bubble" style="border:1px solid ${st.bg}">
           ${s.titolo?`<div class="bubble-title" style="color:${st.color}">${esc(s.titolo)}</div>`:''}
-          <div class="bubble-text">${esc(s.testo)}</div>
+          <div class="bubble-text">${esc(s.testo)}</div>${payLine(s)}
         </div>
       </div>
     </div>`;
@@ -431,7 +440,7 @@ function renderScheda(p){
   const el=document.getElementById('scheda');
   el.style.display='block';
   const ana=[['Nome completo',p.cognome+' '+p.nome],['Data di nascita',p.dataNascita?new Date(p.dataNascita).toLocaleDateString('it-IT'):'—'],['Età',age(p.dataNascita)],['Cod. fiscale',p.codiceFiscale||'—'],['Telefono',p.telefono||'—'],['Email',p.email||'—'],['Indirizzo',p.indirizzo||'—']];
-  const cli=[['Medico inviante',p.medicoInviante||'—'],['Distretto',p.distretto||'—'],['Sedute prescritte',p.sedutePrescritte||'—'],['Patologia',p.patologia||'—'],['Obiettivi',p.obiettivi||'—'],['Anamnesi',p.anamnesi||'—'],['Note',p.note||'—']];
+  const cli=[['Medico inviante',p.medicoInviante||'—'],['Distretto',p.distretto||'—'],['Sedute prescritte',p.sedutePrescritte||'—'],['Patologia',p.patologia||'—'],['Obiettivi',p.obiettivi||'—'],['Anamnesi',p.anamnesi||'—'],['Note',p.note||'—'],['Data prevista controllo',fmtD(p.dataControllo)],['Data RX in possesso',fmtD(p.dataRxPossesso)],['Data RX controllo',fmtD(p.dataRxControllo)]];
   el.innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <div style="font-weight:700;font-size:17px;color:#1A3A5C">Scheda paziente</div>
@@ -459,7 +468,7 @@ function ptFormHTML(data){
     </div>
     <div class="sec-title" style="margin-top:8px">Dati clinici</div>
     <div class="form-grid">
-      ${inp('medicoInviante','Medico inviante')}${inp('sedutePrescritte','Sedute prescritte','number')}
+      ${inp('medicoInviante','Medico inviante')}${inp('sedutePrescritte','Sedute prescritte','number')}${inp('dataControllo','Data prevista controllo','date')}${inp('dataRxPossesso','Data RX in possesso','date')}${inp('dataRxControllo','Data RX controllo','date')}
       ${sel}
     </div>
     ${ta('patologia','Patologia / Diagnosi')}
@@ -470,7 +479,7 @@ function ptFormHTML(data){
 }
 
 function getFormData(){
-  const fields=['cognome','nome','dataNascita','codiceFiscale','telefono','email','indirizzo','medicoInviante','sedutePrescritte','distretto','patologia','anamnesi','obiettivi','note'];
+  const fields=['cognome','nome','dataNascita','codiceFiscale','telefono','email','indirizzo','medicoInviante','sedutePrescritte','distretto','patologia','anamnesi','obiettivi','note','dataControllo','dataRxPossesso','dataRxControllo'];
   const d={};fields.forEach(k=>{const el=document.getElementById('f-'+k);if(el)d[k]=el.value});
   return d;
 }
@@ -515,14 +524,24 @@ function saveSession(){
   const titolo=document.getElementById('sess-title').value.trim();
   const p=patients.find(x=>x.id===selId);if(!p)return;
   const n=sessType==='seduta'?countS(p.sessioni)+1:null;
-  p.sessioni.push({id:Date.now(),data:new Date().toISOString(),tipo:sessType,titolo,testo,numeroseduta:n});
-  push(p);document.getElementById('sess-title').value='';document.getElementById('sess-text').value='';
+  const imp=parseFloat(document.getElementById('pay-importo').value)||0,full=document.getElementById('pay-full').checked,acc=parseFloat(document.getElementById('pay-acconto').value)||0,ver=full?imp:acc;
+  const pagamento=(imp||ver)?{importo:imp,versato:ver,pagato:full,metodo:document.getElementById('pay-metodo').value}:null;
+  p.sessioni.push({id:Date.now(),data:new Date().toISOString(),tipo:sessType,titolo,testo,numeroseduta:n,pagamento});
+  setTimeout(renderMain,0);
+  push(p);resetPay();document.getElementById('sess-title').value='';document.getElementById('sess-text').value='';
   document.getElementById('session-form').style.display='none';document.getElementById('btn-show-form').style.display='';
   renderDiario(p);
 }
 
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 
+function eur(n){return '€ '+n.toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2})}
+function fmtD(d){return d?new Date(d).toLocaleDateString('it-IT'):'—'}
+function saldo(p){let d=0,v=0;(p.sessioni||[]).forEach(s=>{if(s.pagamento){d+=s.pagamento.importo||0;v+=s.pagamento.versato||0}});return{dovuto:d,versato:v,residuo:d-v}}
+function payLine(s){const g=s.pagamento;if(!g)return'';const r=(g.importo||0)-(g.versato||0);
+  return `<div style="margin-top:8px;padding-top:7px;border-top:1px dashed #E2E6EC;font-size:12px;font-weight:600;color:${r>0.004?'#C0392B':'#2E7D5E'}">💶 ${g.importo?'Importo '+eur(g.importo)+' · ':''}${g.pagato?'Pagato':'Versato '+eur(g.versato||0)} (${esc(g.metodo||'')})${r>0.004?' · Residuo '+eur(r):''}</div>`}
+function resetPay(){['pay-importo','pay-acconto'].forEach(i=>document.getElementById(i).value='');document.getElementById('pay-full').checked=false;document.getElementById('pay-acconto').style.display=''}
+document.getElementById('pay-full').onchange=e=>{document.getElementById('pay-acconto').style.display=e.target.checked?'none':''};
 function exportBackup(){
   const date=new Date().toISOString().slice(0,10);
   const blob=new Blob([JSON.stringify(patients,null,2)],{type:'application/json'});
