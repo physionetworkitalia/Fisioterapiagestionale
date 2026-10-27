@@ -161,6 +161,7 @@ input,textarea,select,button{font-family:inherit;font-size:16px}
     </div>
     <div id="pt-list"></div>
     <div id="sidebar-footer">
+      <button class="btn-reset" id="btn-home" style="color:#fff;border-color:rgba(255,255,255,.35);font-size:14px;padding:10px" onclick="openHome()">🏠 Home e agenda</button>
       <button class="btn-new" id="btn-new-pt">＋ Nuovo Paziente</button>
       <button class="btn-reset" id="btn-debiti" style="color:#F59E0B;border-color:rgba(245,158,11,.5);font-size:14px;padding:10px">💰 Da incassare</button>
       <div style="display:flex;gap:7px">
@@ -215,6 +216,11 @@ input,textarea,select,button{font-family:inherit;font-size:16px}
             <label style="display:flex;align-items:center;gap:8px;font-size:15px"><input type="checkbox" id="pay-full" style="width:22px;height:22px"/> Pagato per intero</label>
             <input class="inp" id="pay-acconto" type="number" inputmode="decimal" placeholder="Acconto versato € (se non pagato per intero)"/>
           </div>
+          <div style="background:#F7F9FB;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px">
+            <div style="font-size:11px;font-weight:700;color:#6B7A8D;text-transform:uppercase">📅 Prossimo appuntamento (opzionale)</div>
+            <div style="display:flex;gap:8px"><input class="inp" id="next-date" type="date"/><input class="inp" id="next-time" type="time"/></div>
+            <input class="inp" id="next-rep" type="number" inputmode="numeric" min="0" placeholder="Ripeti ogni settimana per altre … settimane (0 = no)"/>
+          </div>
           <div class="form-btns">
             <button class="btn-cancel" id="btn-cancel-sess">Annulla</button>
             <button class="btn-save" id="btn-save-sess">Salva</button>
@@ -225,6 +231,7 @@ input,textarea,select,button{font-family:inherit;font-size:16px}
 
     <div id="scheda" style="display:none"></div>
     <div id="debiti" style="display:none;flex:1;overflow-y:auto;padding:14px"></div>
+    <div id="home" style="display:none;flex:1;overflow-y:auto;padding:14px"></div>
     <div id="pt-form" style="display:none"></div>
     <div id="empty">
       <div style="font-size:48px">🦴</div>
@@ -235,6 +242,7 @@ input,textarea,select,button{font-family:inherit;font-size:16px}
 
   <!-- Bottom nav -->
   <nav id="bottom-nav">
+    <button class="bnav-btn" onclick="openHome()"><span class="bnav-icon">🏠</span>Home</button>
     <button class="bnav-btn active" id="bnav-chat" onclick="switchView('chat')"><span class="bnav-icon">📋</span>Diario</button>
     <button class="bnav-btn" id="bnav-anagrafica" onclick="switchView('anagrafica')"><span class="bnav-icon">👤</span>Scheda</button>
     <button class="bnav-btn" onclick="openSidebar()"><span class="bnav-icon">👥</span>Pazienti</button>
@@ -276,7 +284,7 @@ function startSync(){
     }
     cloud.sort((a,b)=>(a.cognome+a.nome).localeCompare(b.cognome+b.nome));
     patients=cloud;
-    if(!patients.find(p=>p.id===selId)){selId=patients[0]?.id||null;curView=selId?'chat':'empty'}
+    if(firstHome){firstHome=false;selId=null;curView='home'}else if(!patients.find(p=>p.id===selId)){selId=patients[0]?.id||null;curView=selId?'chat':'empty'}
     save();
     const busy=document.getElementById('session-form').style.display==='flex'||document.getElementById('pt-form').style.display==='block';
     busy?renderSidebar():renderAll();
@@ -368,10 +376,11 @@ function renderAll(){
 function renderMain(){
   const p=patients.find(x=>x.id===selId);
   // hide all views
-  ['diario','scheda','pt-form','empty','debiti'].forEach(id=>document.getElementById(id).style.display='none');
+  ['diario','scheda','pt-form','empty','debiti','home'].forEach(id=>document.getElementById(id).style.display='none');
   document.getElementById('pt-header').style.display='none';
   document.getElementById('mobile-topbar').querySelector('#btn-del-mobile').style.display='none';
   if(curView==='debiti'){renderDebiti();return}
+  if(curView==='home'){renderHome();return}
 
   if(curView==='new-patient'){
     renderPtForm(null);
@@ -531,6 +540,7 @@ function saveSession(){
   const imp=parseFloat(document.getElementById('pay-importo').value)||0,full=document.getElementById('pay-full').checked,acc=parseFloat(document.getElementById('pay-acconto').value)||0,ver=full?imp:acc;
   const pagamento=(imp||ver)?{importo:imp,versato:ver,pagato:full,metodo:document.getElementById('pay-metodo').value}:null;
   p.sessioni.push({id:Date.now(),data:new Date().toISOString(),tipo:sessType,titolo,testo,numeroseduta:n,pagamento});
+  const nd=document.getElementById('next-date').value;if(nd)createAppts(p,nd,document.getElementById('next-time').value,document.getElementById('next-rep').value);
   setTimeout(renderMain,0);
   push(p);resetPay();document.getElementById('sess-title').value='';document.getElementById('sess-text').value='';
   document.getElementById('session-form').style.display='none';document.getElementById('btn-show-form').style.display='';
@@ -544,7 +554,7 @@ function fmtD(d){return d?new Date(d).toLocaleDateString('it-IT'):'—'}
 function saldo(p){let d=0,v=0;(p.sessioni||[]).forEach(s=>{if(s.pagamento){d+=s.pagamento.importo||0;v+=s.pagamento.versato||0}});return{dovuto:d,versato:v,residuo:d-v}}
 function payLine(s){const g=s.pagamento;if(!g)return'';const r=(g.importo||0)-(g.versato||0);
   return `<div style="margin-top:8px;padding-top:7px;border-top:1px dashed #E2E6EC;font-size:12px;font-weight:600;color:${r>0.004?'#C0392B':'#2E7D5E'}">💶 ${g.importo?'Importo '+eur(g.importo)+' · ':''}${g.pagato?'Pagato':'Versato '+eur(g.versato||0)} (${esc(g.metodo||'')})${r>0.004?' · Residuo '+eur(r):''}</div>`}
-function resetPay(){['pay-importo','pay-acconto'].forEach(i=>document.getElementById(i).value='');document.getElementById('pay-full').checked=false;document.getElementById('pay-acconto').style.display=''}
+function resetPay(){['next-date','next-time','next-rep'].forEach(i=>document.getElementById(i).value='');['pay-importo','pay-acconto'].forEach(i=>document.getElementById(i).value='');document.getElementById('pay-full').checked=false;document.getElementById('pay-acconto').style.display=''}
 document.getElementById('pay-full').onchange=e=>{document.getElementById('pay-acconto').style.display=e.target.checked?'none':''};
 function renderDebiti(){
   const el=document.getElementById('debiti');el.style.display='block';
@@ -559,6 +569,46 @@ function renderDebiti(){
 function openDebiti(){curView='debiti';if(isMobile())closeSidebar();renderMain()}
 function closeDebiti(){curView=selId?'chat':'empty';renderMain()}
 document.getElementById('btn-debiti').onclick=openDebiti;
+const MESI=['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'],GG=['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
+let homeDay=new Date(),firstHome=true;
+function iso(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function allAppts(){const r=[];patients.forEach(p=>(p.appuntamenti||[]).forEach(a=>r.push({p,a})));return r}
+function setDay(k){homeDay=new Date(k+'T12:00:00');renderHome()}
+function shiftDay(n){homeDay=new Date(homeDay.getTime());homeDay.setDate(homeDay.getDate()+n);renderHome()}
+function shiftMonth(n){homeDay=new Date(homeDay.getFullYear(),homeDay.getMonth()+n,1,12);renderHome()}
+function openHome(){curView='home';if(isMobile())closeSidebar();renderMain()}
+function createAppts(p,date,ora,rep){p.appuntamenti=p.appuntamenti||[];const n=Math.max(0,Math.min(52,parseInt(rep)||0));
+  for(let i=0;i<=n;i++){const d=new Date(date+'T12:00:00');d.setDate(d.getDate()+7*i);const k=iso(d);
+    if(!p.appuntamenti.some(a=>a.data===k&&a.ora===(ora||'')))p.appuntamenti.push({id:Date.now()+i,data:k,ora:ora||''})}}
+function delAppt(pid,aid){const p=patients.find(x=>x.id===pid);if(!p||!confirm('Eliminare questo appuntamento?'))return;p.appuntamenti=(p.appuntamenti||[]).filter(a=>a.id!==aid);push(p);renderHome()}
+function addApptManual(){const p=patients.find(x=>x.id==document.getElementById('ap-pt').value),d=document.getElementById('ap-date').value;if(!p||!d)return alert('Scegli paziente e data');createAppts(p,d,document.getElementById('ap-time').value,document.getElementById('ap-rep').value);push(p);renderHome()}
+function renderHome(){
+  const el=document.getElementById('home');el.style.display='block';
+  document.getElementById('topbar-info').innerHTML='<div style="font-weight:700;font-size:15px">🏠 Home</div>';
+  const ap=allAppts(),sel=iso(homeDay),today=iso(new Date()),y=homeDay.getFullYear(),m=homeDay.getMonth(),off=(new Date(y,m,1).getDay()+6)%7,dim=new Date(y,m+1,0).getDate(),has={};
+  ap.forEach(x=>has[x.a.data]=1);
+  let cells='';for(let i=0;i<off;i++)cells+='<div></div>';
+  for(let d=1;d<=dim;d++){const k=iso(new Date(y,m,d));cells+=`<div onclick="setDay('${k}')" style="text-align:center;padding:6px 0;border-radius:8px;cursor:pointer;font-size:13px;${k===sel?'background:#1A3A5C;color:#fff':k===today?'background:#E5EFF7':''}">${d}<div style="height:5px;width:5px;border-radius:50%;margin:1px auto 0;background:${has[k]?'#4FC3B0':'transparent'}"></div></div>`}
+  const mon=new Date(homeDay);mon.setDate(mon.getDate()-(homeDay.getDay()+6)%7);const sun=new Date(mon);sun.setDate(mon.getDate()+6);
+  let week='';
+  for(let i=0;i<7;i++){const d=new Date(mon);d.setDate(mon.getDate()+i);const k=iso(d),list=ap.filter(x=>x.a.data===k).sort((a,b)=>a.a.ora.localeCompare(b.a.ora));
+    week+=`<div class="info-card" style="margin-bottom:8px;${k===today?'border-left:4px solid #4FC3B0':''}"><div style="font-weight:700;font-size:13px;color:#1A3A5C;margin-bottom:${list.length?6:0}px">${GG[i]} ${d.getDate()} ${MESI[d.getMonth()].slice(0,3)}${list.length?'':' <span style="font-weight:400;color:#9AA3B0">· libero</span>'}</div>`+
+    list.map(x=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid #F0F2F5"><div style="font-weight:700;font-size:13px;color:#2E7D5E;min-width:44px">${x.a.ora||'—'}</div><div onclick="selectPatient(${x.p.id})" style="flex:1;font-size:14px;cursor:pointer">${esc(x.p.cognome+' '+x.p.nome)}</div><button onclick="delAppt(${x.p.id},${x.a.id})" style="background:none;border:none;color:#C0392B;font-size:16px;cursor:pointer">✕</button></div>`).join('')+'</div>'}
+  const rec=patients.map(p=>({p,t:(p.sessioni||[]).filter(x=>x.tipo==='seduta').map(x=>x.data).sort().pop()})).filter(x=>x.t).sort((a,b)=>b.t.localeCompare(a.t)).slice(0,5);
+  const nav=(a,b,t)=>`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><button class="tab-btn" onclick="${a}">‹</button><div style="font-weight:700;font-size:14px;color:#1A3A5C">${t}</div><button class="tab-btn" onclick="${b}">›</button></div>`;
+  el.innerHTML=`<div style="font-weight:700;font-size:19px;color:#1A3A5C;margin-bottom:14px">🏠 Home</div>
+  <div class="sec-title">Ultimi pazienti trattati</div>
+  ${rec.length?rec.map(x=>`<div class="info-card" style="display:flex;align-items:center;gap:10px;margin-bottom:8px;cursor:pointer" onclick="selectPatient(${x.p.id})"><div class="pt-header-avatar" style="width:36px;height:36px;font-size:13px">${initials(x.p)}</div><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14px">${esc(x.p.cognome+' '+x.p.nome)}</div><div style="font-size:12px;color:#9AA3B0">${esc(x.p.distretto||'')}</div></div><div style="font-size:12px;color:#6B7A8D">${new Date(x.t).toLocaleDateString('it-IT',{day:'2-digit',month:'short'})}</div></div>`).join(''):'<div style="color:#9AA3B0;font-size:13px;margin-bottom:8px">Nessuna seduta registrata</div>'}
+  <div class="sec-title" style="margin-top:16px">Calendario</div>
+  <div class="info-card" style="margin-bottom:16px">${nav('shiftMonth(-1)','shiftMonth(1)',MESI[m]+' '+y)}<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px"><div style="text-align:center;font-size:10px;color:#9AA3B0">L</div><div style="text-align:center;font-size:10px;color:#9AA3B0">M</div><div style="text-align:center;font-size:10px;color:#9AA3B0">M</div><div style="text-align:center;font-size:10px;color:#9AA3B0">G</div><div style="text-align:center;font-size:10px;color:#9AA3B0">V</div><div style="text-align:center;font-size:10px;color:#9AA3B0">S</div><div style="text-align:center;font-size:10px;color:#9AA3B0">D</div>${cells}</div></div>
+  <div class="sec-title">Tabellone settimanale</div>
+  ${nav('shiftDay(-7)','shiftDay(7)',mon.getDate()+' '+MESI[mon.getMonth()].slice(0,3)+' – '+sun.getDate()+' '+MESI[sun.getMonth()].slice(0,3))}${week}
+  <details style="margin-top:8px"><summary style="cursor:pointer;font-weight:600;color:#1A3A5C;padding:8px 0">＋ Nuovo appuntamento</summary><div style="display:flex;flex-direction:column;gap:8px;padding-top:6px">
+  <select class="inp" id="ap-pt" style="appearance:auto;-webkit-appearance:menulist">${patients.map(p=>`<option value="${p.id}">${esc(p.cognome+' '+p.nome)}</option>`).join('')}</select>
+  <div style="display:flex;gap:8px"><input class="inp" id="ap-date" type="date" value="${sel}"/><input class="inp" id="ap-time" type="time"/></div>
+  <input class="inp" id="ap-rep" type="number" inputmode="numeric" min="0" placeholder="Ripeti ogni settimana per altre … settimane (0 = no)"/>
+  <button class="btn-save" style="flex:none" onclick="addApptManual()">Aggiungi</button></div></details>`;
+}
 function exportBackup(){
   const date=new Date().toISOString().slice(0,10);
   const blob=new Blob([JSON.stringify(patients,null,2)],{type:'application/json'});
