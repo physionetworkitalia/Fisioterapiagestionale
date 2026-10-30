@@ -582,38 +582,41 @@ function createAppts(p,date,ora,rep){p.appuntamenti=p.appuntamenti||[];const n=M
     if(!p.appuntamenti.some(a=>a.data===k&&a.ora===(ora||'')))p.appuntamenti.push({id:Date.now()+i,data:k,ora:ora||''})}}
 function delAppt(pid,aid){const p=patients.find(x=>x.id===pid);if(!p||!confirm('Eliminare questo appuntamento?'))return;p.appuntamenti=(p.appuntamenti||[]).filter(a=>a.id!==aid);push(p);renderHome()}
 function addApptManual(){const p=patients.find(x=>x.id==document.getElementById('ap-pt').value),d=document.getElementById('ap-date').value;if(!p||!d)return alert('Scegli paziente e data');createAppts(p,d,document.getElementById('ap-time').value,document.getElementById('ap-rep').value);push(p);renderHome()}
+function weekBoard(mon,ap,today,SL){
+  let w='<div style="overflow-x:auto"><div style="display:grid;grid-template-columns:44px repeat(5,minmax(96px,1fr));gap:4px;min-width:540px"><div></div>';
+  const dk=[];
+  for(let i=0;i<5;i++){const d=new Date(mon);d.setDate(mon.getDate()+i);dk.push(iso(d));w+=`<div style="text-align:center;font-weight:700;font-size:12px;padding:6px 0;border-radius:8px;color:#fff;background:${dk[i]===today?'#4FC3B0':'#1A3A5C'}">${GG[i]} ${d.getDate()}</div>`}
+  const si=o=>{let r=0;SL.forEach((t,j)=>{if(o>=t)r=j});return r};
+  SL.forEach((t,j)=>{w+=`<div style="font-size:11px;color:#6B7A8D;font-weight:600;padding-top:8px">${t}</div>`;
+    dk.forEach(k=>{const l=ap.filter(x=>x.a.data===k&&si(x.a.ora||'')===j);
+      w+=`<div onclick="slotClick('${k}','${t}')" style="min-height:44px;background:#fff;border-radius:8px;padding:3px;border:1px solid #E8ECF1;cursor:pointer">`+l.map(x=>`<div onclick="event.stopPropagation();selectPatient(${x.p.id})" style="background:#E4F4EE;color:#2E7D5E;border-radius:6px;padding:3px 5px;font-size:11px;font-weight:600;margin-bottom:2px;display:flex;justify-content:space-between;gap:3px"><span>${esc(x.p.cognome)}${x.a.ora&&x.a.ora!==t?' <small>'+x.a.ora+'</small>':''}</span><span onclick="event.stopPropagation();delAppt(${x.p.id},${x.a.id})" style="color:#C0392B">✕</span></div>`).join('')+'</div>'})});
+  w+='</div></div>';
+  const we=ap.filter(x=>{const df=Math.round((new Date(x.a.data+'T12:00:00')-mon)/864e5);return df>=5&&df<=6});
+  if(we.length)w+='<div class="info-card" style="margin-top:8px;font-size:13px"><b>Weekend:</b> '+we.map(x=>x.a.data.slice(8)+'/'+x.a.data.slice(5,7)+' '+(x.a.ora||'')+' '+esc(x.p.cognome)).join(' · ')+'</div>';
+  return w;
+}
 function renderHome(){
   const el=document.getElementById('home');el.style.display='block';
   document.getElementById('topbar-info').innerHTML='<div style="font-weight:700;font-size:15px">🏠 Home</div>';
-  const ap=allAppts(),sel=iso(homeDay),today=iso(new Date()),y=homeDay.getFullYear(),m=homeDay.getMonth(),off=(new Date(y,m,1).getDay()+6)%7,dim=new Date(y,m+1,0).getDate(),has={};
-  ap.forEach(x=>has[x.a.data]=1);
-  let cells='';for(let i=0;i<off;i++)cells+='<div></div>';
-  for(let d=1;d<=dim;d++){const k=iso(new Date(y,m,d));cells+=`<div onclick="setDay('${k}')" style="text-align:center;padding:6px 0;border-radius:8px;cursor:pointer;font-size:13px;${k===sel?'background:#1A3A5C;color:#fff':k===today?'background:#E5EFF7':''}">${d}<div style="height:5px;width:5px;border-radius:50%;margin:1px auto 0;background:${has[k]?'#4FC3B0':'transparent'}"></div></div>`}
-  const mon=new Date(homeDay);mon.setDate(mon.getDate()-(homeDay.getDay()+6)%7);const sun=new Date(mon);sun.setDate(mon.getDate()+4);
-  mon.setHours(12,0,0,0);
-  const SL=slotList();
-  let week='<div style="overflow-x:auto"><div style="display:grid;grid-template-columns:44px repeat(5,minmax(96px,1fr));gap:4px;min-width:540px"><div></div>';
-  const dk=[];
-  for(let i=0;i<5;i++){const d=new Date(mon);d.setDate(mon.getDate()+i);dk.push(iso(d));week+=`<div style="text-align:center;font-weight:700;font-size:12px;padding:6px 0;border-radius:8px;color:#fff;background:${dk[i]===today?'#4FC3B0':'#1A3A5C'}">${GG[i]} ${d.getDate()}</div>`}
-  const si=o=>{let r=0;SL.forEach((t,j)=>{if(o>=t)r=j});return r};
-  SL.forEach((t,j)=>{week+=`<div style="font-size:11px;color:#6B7A8D;font-weight:600;padding-top:8px">${t}</div>`;
-    dk.forEach(k=>{const l=ap.filter(x=>x.a.data===k&&si(x.a.ora||'')===j);
-      week+=`<div onclick="slotClick('${k}','${t}')" style="min-height:44px;background:#fff;border-radius:8px;padding:3px;border:1px solid #E8ECF1;cursor:pointer">`+l.map(x=>`<div onclick="event.stopPropagation();selectPatient(${x.p.id})" style="background:#E4F4EE;color:#2E7D5E;border-radius:6px;padding:3px 5px;font-size:11px;font-weight:600;margin-bottom:2px;display:flex;justify-content:space-between;gap:3px"><span>${esc(x.p.cognome)}${x.a.ora&&x.a.ora!==t?' <small>'+x.a.ora+'</small>':''}</span><span onclick="event.stopPropagation();delAppt(${x.p.id},${x.a.id})" style="color:#C0392B">✕</span></div>`).join('')+'</div>'})});
-  week+='</div></div>';
-  const we=ap.filter(x=>{const df=Math.round((new Date(x.a.data+'T12:00:00')-mon)/864e5);return df>=5&&df<=6});
-  if(we.length)week+='<div class="info-card" style="margin-top:8px;font-size:13px"><b>Weekend:</b> '+we.map(x=>x.a.data.slice(8)+'/'+x.a.data.slice(5,7)+' '+(x.a.ora||'')+' '+esc(x.p.cognome)).join(' · ')+'</div>';
+  const ap=allAppts(),now=new Date(),today=iso(now),SL=slotList();
+  const mon=new Date(now);mon.setDate(now.getDate()-(now.getDay()+6)%7);mon.setHours(12,0,0,0);
+  const mon2=new Date(mon);mon2.setDate(mon.getDate()+7);
+  const rng=m=>{const f=new Date(m);f.setDate(m.getDate()+4);return m.getDate()+' '+MESI[m.getMonth()].slice(0,3)+' – '+f.getDate()+' '+MESI[f.getMonth()].slice(0,3)};
+  const GI=['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
+  const tod=ap.filter(x=>x.a.data===today).sort((a,b)=>(a.a.ora||'').localeCompare(b.a.ora||''));
   const rec=patients.map(p=>({p,t:(p.sessioni||[]).filter(x=>x.tipo==='seduta').map(x=>x.data).sort().pop()})).filter(x=>x.t).sort((a,b)=>b.t.localeCompare(a.t)).slice(0,5);
-  const nav=(a,b,t)=>`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><button class="tab-btn" onclick="${a}">‹</button><div style="font-weight:700;font-size:14px;color:#1A3A5C">${t}</div><button class="tab-btn" onclick="${b}">›</button></div>`;
   el.innerHTML=`<div style="font-weight:700;font-size:19px;color:#1A3A5C;margin-bottom:14px">🏠 Home</div>
-  <div class="sec-title">Ultimi pazienti trattati</div>
+  <div class="sec-title">Oggi · ${GI[now.getDay()]} ${now.getDate()} ${MESI[now.getMonth()]} · ${tod.length} appuntament${tod.length==1?'o':'i'}</div>
+  ${tod.length?tod.map(x=>`<div class="info-card" style="display:flex;align-items:center;gap:10px;margin-bottom:8px;cursor:pointer" onclick="selectPatient(${x.p.id})"><div style="font-weight:700;font-size:15px;color:#2E7D5E;min-width:52px">${x.a.ora||'—'}</div><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14px">${esc(x.p.cognome+' '+x.p.nome)}</div><div style="font-size:12px;color:#9AA3B0">${esc(x.p.distretto||'')}</div></div><span onclick="event.stopPropagation();delAppt(${x.p.id},${x.a.id})" style="color:#C0392B;font-size:16px">✕</span></div>`).join(''):'<div style="color:#9AA3B0;font-size:13px;margin-bottom:8px">Nessun appuntamento oggi</div>'}
+  <div class="sec-title" style="margin-top:16px">Ultimi pazienti trattati</div>
   ${rec.length?rec.map(x=>`<div class="info-card" style="display:flex;align-items:center;gap:10px;margin-bottom:8px;cursor:pointer" onclick="selectPatient(${x.p.id})"><div class="pt-header-avatar" style="width:36px;height:36px;font-size:13px">${initials(x.p)}</div><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14px">${esc(x.p.cognome+' '+x.p.nome)}</div><div style="font-size:12px;color:#9AA3B0">${esc(x.p.distretto||'')}</div></div><div style="font-size:12px;color:#6B7A8D">${new Date(x.t).toLocaleDateString('it-IT',{day:'2-digit',month:'short'})}</div></div>`).join(''):'<div style="color:#9AA3B0;font-size:13px;margin-bottom:8px">Nessuna seduta registrata</div>'}
-  <div class="sec-title" style="margin-top:16px">Calendario</div>
-  <div class="info-card" style="margin-bottom:16px">${nav('shiftMonth(-1)','shiftMonth(1)',MESI[m]+' '+y)}<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px"><div style="text-align:center;font-size:10px;color:#9AA3B0">L</div><div style="text-align:center;font-size:10px;color:#9AA3B0">M</div><div style="text-align:center;font-size:10px;color:#9AA3B0">M</div><div style="text-align:center;font-size:10px;color:#9AA3B0">G</div><div style="text-align:center;font-size:10px;color:#9AA3B0">V</div><div style="text-align:center;font-size:10px;color:#9AA3B0">S</div><div style="text-align:center;font-size:10px;color:#9AA3B0">D</div>${cells}</div></div>
-  <div class="sec-title">Tabellone settimanale</div>
-  ${nav('shiftDay(-7)','shiftDay(7)',mon.getDate()+' '+MESI[mon.getMonth()].slice(0,3)+' – '+sun.getDate()+' '+MESI[sun.getMonth()].slice(0,3))}${slotEditor()}${week}
-  <details id="ap-det" style="margin-top:8px"><summary style="cursor:pointer;font-weight:600;color:#1A3A5C;padding:8px 0">＋ Nuovo appuntamento</summary><div style="display:flex;flex-direction:column;gap:8px;padding-top:6px">
+  <div class="sec-title" style="margin-top:16px">Piano trattamenti · settimana attuale (${rng(mon)})</div>
+  ${slotEditor()}${weekBoard(mon,ap,today,SL)}
+  <div class="sec-title" style="margin-top:16px">Settimana prossima (${rng(mon2)})</div>
+  ${weekBoard(mon2,ap,today,SL)}
+  <details id="ap-det" style="margin-top:12px"><summary style="cursor:pointer;font-weight:600;color:#1A3A5C;padding:8px 0">＋ Nuovo appuntamento</summary><div style="display:flex;flex-direction:column;gap:8px;padding-top:6px">
   <select class="inp" id="ap-pt" style="appearance:auto;-webkit-appearance:menulist">${patients.map(p=>`<option value="${p.id}">${esc(p.cognome+' '+p.nome)}</option>`).join('')}</select>
-  <div style="display:flex;gap:8px"><input class="inp" id="ap-date" type="date" value="${sel}"/><input class="inp" id="ap-time" type="time"/></div>
+  <div style="display:flex;gap:8px"><input class="inp" id="ap-date" type="date" value="${today}"/><input class="inp" id="ap-time" type="time"/></div>
   <input class="inp" id="ap-rep" type="number" inputmode="numeric" min="0" placeholder="Ripeti ogni settimana per altre … settimane (0 = no)"/>
   <button class="btn-save" style="flex:none" onclick="addApptManual()">Aggiungi</button></div></details>`;
 }
