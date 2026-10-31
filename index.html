@@ -432,7 +432,7 @@ function renderDiario(p){
         </div>
         <div class="bubble" style="border:1px solid ${st.bg}">
           ${s.titolo?`<div class="bubble-title" style="color:${st.color}">${esc(s.titolo)}</div>`:''}
-          <div class="bubble-text">${esc(s.testo)}</div>${payLine(s)}<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;padding-top:7px;border-top:1px dashed #E2E6EC"><label style="font-size:12px;color:#6B7A8D">📅 <input type="datetime-local" value="${localInput(s.data)}" onchange="chgSessDate(${s.id},this.value)" style="font-size:12px;border:1px solid #E2E6EC;border-radius:6px;padding:2px 4px"/></label><button onclick="delSess(${s.id})" style="background:none;border:1px solid #fca5a5;color:#C0392B;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer">🗑 Elimina</button></div>
+          <div class="bubble-text">${esc(s.testo)}</div>${payLine(s)}<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;padding-top:7px;border-top:1px dashed #E2E6EC"><label style="font-size:12px;color:#6B7A8D">📅 <input type="datetime-local" value="${localInput(s.data)}" onchange="chgSessDate(${s.id},this.value)" style="font-size:12px;border:1px solid #E2E6EC;border-radius:6px;padding:2px 4px"/></label><button onclick="editSess(${s.id})" style="background:none;border:1px solid #BFD3E6;color:#2C5F8A;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;margin-left:auto">✏️ Modifica</button><button onclick="delSess(${s.id})" style="background:none;border:1px solid #fca5a5;color:#C0392B;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer">🗑 Elimina</button></div>
         </div>
       </div>
     </div>`;
@@ -539,7 +539,9 @@ function saveSession(){
   const n=sessType==='seduta'?countS(p.sessioni)+1:null;
   const imp=parseFloat(document.getElementById('pay-importo').value)||0,full=document.getElementById('pay-full').checked,acc=parseFloat(document.getElementById('pay-acconto').value)||0,ver=full?imp:acc;
   const pagamento=(imp||ver)?{importo:imp,versato:ver,pagato:full,metodo:document.getElementById('pay-metodo').value}:null;
-  p.sessioni.push({id:Date.now(),data:new Date().toISOString(),tipo:sessType,titolo,testo,numeroseduta:n,pagamento});
+  if(editSessId){const e=p.sessioni.find(x=>x.id===editSessId);if(e){e.tipo=sessType;e.titolo=titolo;e.testo=testo;e.pagamento=pagamento;if(sessType!=='seduta')e.numeroseduta=null}editSessId=null;document.getElementById('btn-save-sess').textContent='Salva'}
+  else p.sessioni.push({id:Date.now(),data:new Date().toISOString(),tipo:sessType,titolo,testo,numeroseduta:n,pagamento});
+  renum(p);
   const nd=document.getElementById('next-date').value;if(nd)createAppts(p,nd,document.getElementById('next-time').value,document.getElementById('next-rep').value);
   setTimeout(renderMain,0);
   push(p);resetPay();document.getElementById('sess-title').value='';document.getElementById('sess-text').value='';
@@ -582,6 +584,15 @@ function createAppts(p,date,ora,rep){p.appuntamenti=p.appuntamenti||[];const n=M
     if(!p.appuntamenti.some(a=>a.data===k&&a.ora===(ora||'')))p.appuntamenti.push({id:Date.now()+i,data:k,ora:ora||''})}}
 function delAppt(pid,aid){const p=patients.find(x=>x.id===pid);if(!p||!confirm('Eliminare questo appuntamento?'))return;p.appuntamenti=(p.appuntamenti||[]).filter(a=>a.id!==aid);push(p);renderHome()}
 function addApptManual(){const p=patients.find(x=>x.id==document.getElementById('ap-pt').value),d=document.getElementById('ap-date').value;if(!p||!d)return alert('Scegli paziente e data');createAppts(p,d,document.getElementById('ap-time').value,document.getElementById('ap-rep').value);push(p);renderHome()}
+let editSessId=null,wkOff=3;
+function editSess(id){const p=patients.find(x=>x.id===selId),e=p&&p.sessioni.find(x=>x.id===id);if(!e)return;
+  editSessId=id;sessType=e.tipo;resetPay();
+  document.getElementById('sess-title').value=e.titolo||'';document.getElementById('sess-text').value=e.testo||'';
+  const g=e.pagamento;if(g){document.getElementById('pay-importo').value=g.importo||'';document.getElementById('pay-full').checked=!!g.pagato;document.getElementById('pay-acconto').value=g.pagato?'':(g.versato||'');document.getElementById('pay-acconto').style.display=g.pagato?'none':'';if(g.metodo)document.getElementById('pay-metodo').value=g.metodo}
+  document.getElementById('btn-save-sess').textContent='Salva modifiche';
+  document.getElementById('session-form').style.display='flex';document.getElementById('btn-show-form').style.display='none';renderTypePills();
+  document.getElementById('session-form').scrollIntoView({behavior:'smooth',block:'end'})}
+function shiftWk(n){const t=document.getElementById('home').scrollTop;wkOff+=n;renderHome();document.getElementById('home').scrollTop=t}
 function weekBoard(mon,ap,today,SL){
   let w='<div style="overflow-x:auto"><div style="display:grid;grid-template-columns:44px repeat(5,minmax(96px,1fr));gap:4px;min-width:540px"><div></div>';
   const dk=[];
@@ -600,7 +611,7 @@ function renderHome(){
   document.getElementById('topbar-info').innerHTML='<div style="font-weight:700;font-size:15px">🏠 Home</div>';
   const ap=allAppts(),now=new Date(),today=iso(now),SL=slotList();
   const mon=new Date(now);mon.setDate(now.getDate()-(now.getDay()+6)%7);mon.setHours(12,0,0,0);
-  const mon2=new Date(mon);mon2.setDate(mon.getDate()+7);
+  const mon2=new Date(mon);mon2.setDate(mon.getDate()+7);const mon3=new Date(mon);mon3.setDate(mon.getDate()+14);const mon4=new Date(mon);mon4.setDate(mon.getDate()+7*wkOff);
   const rng=m=>{const f=new Date(m);f.setDate(m.getDate()+4);return m.getDate()+' '+MESI[m.getMonth()].slice(0,3)+' – '+f.getDate()+' '+MESI[f.getMonth()].slice(0,3)};
   const GI=['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
   const tod=ap.filter(x=>x.a.data===today).sort((a,b)=>(a.a.ora||'').localeCompare(b.a.ora||''));
@@ -614,6 +625,11 @@ function renderHome(){
   ${slotEditor()}${weekBoard(mon,ap,today,SL)}
   <div class="sec-title" style="margin-top:16px">Settimana prossima (${rng(mon2)})</div>
   ${weekBoard(mon2,ap,today,SL)}
+  <div class="sec-title" style="margin-top:16px">Tra due settimane (${rng(mon3)})</div>
+  ${weekBoard(mon3,ap,today,SL)}
+  <div class="sec-title" style="margin-top:16px">Scorri altre settimane</div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><button class="tab-btn" onclick="shiftWk(-1)">‹</button><div style="font-weight:700;font-size:14px;color:#1A3A5C">${rng(mon4)}${wkOff===0?' · attuale':wkOff<0?' · '+(-wkOff)+' sett. fa':' · tra '+wkOff+' sett.'}</div><button class="tab-btn" onclick="shiftWk(1)">›</button></div>
+  ${weekBoard(mon4,ap,today,SL)}
   <details id="ap-det" style="margin-top:12px"><summary style="cursor:pointer;font-weight:600;color:#1A3A5C;padding:8px 0">＋ Nuovo appuntamento</summary><div style="display:flex;flex-direction:column;gap:8px;padding-top:6px">
   <select class="inp" id="ap-pt" style="appearance:auto;-webkit-appearance:menulist">${patients.map(p=>`<option value="${p.id}">${esc(p.cognome+' '+p.nome)}</option>`).join('')}</select>
   <div style="display:flex;gap:8px"><input class="inp" id="ap-date" type="date" value="${today}"/><input class="inp" id="ap-time" type="time"/></div>
@@ -666,7 +682,7 @@ document.getElementById('overlay').onclick=closeSidebar;
 document.getElementById('btn-collapse').onclick=()=>{sidebarCollapsed=true;document.getElementById('sidebar').classList.add('collapsed');document.getElementById('btn-expand').style.display=''};
 document.getElementById('btn-expand').onclick=()=>{sidebarCollapsed=false;document.getElementById('sidebar').classList.remove('collapsed');document.getElementById('btn-expand').style.display='none'};
 document.getElementById('btn-show-form').onclick=()=>{document.getElementById('session-form').style.display='flex';document.getElementById('btn-show-form').style.display='none';renderTypePills()};
-document.getElementById('btn-cancel-sess').onclick=()=>{document.getElementById('session-form').style.display='none';document.getElementById('btn-show-form').style.display=''};
+document.getElementById('btn-cancel-sess').onclick=()=>{editSessId=null;document.getElementById('btn-save-sess').textContent='Salva';resetPay();document.getElementById('sess-title').value='';document.getElementById('sess-text').value='';document.getElementById('session-form').style.display='none';document.getElementById('btn-show-form').style.display=''};
 document.getElementById('btn-save-sess').onclick=saveSession;
 
 // Init
