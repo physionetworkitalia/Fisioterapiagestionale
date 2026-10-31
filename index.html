@@ -212,9 +212,9 @@ input,textarea,select,button{font-family:inherit;font-size:16px}
           <textarea class="inp" id="sess-text" rows="3" placeholder="Tecniche, NRS dolore, ROM, risposta del paziente…" style="resize:none"></textarea>
           <div style="background:#F7F9FB;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px">
             <div style="font-size:11px;font-weight:700;color:#6B7A8D;text-transform:uppercase">💶 Pagamento (opzionale)</div>
-            <div style="display:flex;gap:8px"><input class="inp" id="pay-importo" type="number" inputmode="decimal" placeholder="Importo €"/><select class="inp" id="pay-metodo" style="appearance:auto;-webkit-appearance:menulist"><option>Contanti</option><option>POS</option></select></div>
+            <div style="display:flex;gap:8px"><input class="inp" id="pay-importo" type="number" inputmode="decimal" placeholder="Importo seduta di oggi €"/><select class="inp" id="pay-metodo" style="appearance:auto;-webkit-appearance:menulist"><option>Contanti</option><option>POS</option></select></div>
             <label style="display:flex;align-items:center;gap:8px;font-size:15px"><input type="checkbox" id="pay-full" style="width:22px;height:22px"/> Pagato per intero</label>
-            <input class="inp" id="pay-acconto" type="number" inputmode="decimal" placeholder="Acconto versato € (se non pagato per intero)"/>
+            <input class="inp" id="pay-acconto" type="number" inputmode="decimal" placeholder="Incassato oggi € (anche per il vecchio residuo)"/><div id="pay-hint" style="font-size:12px;color:#6B7A8D"></div>
           </div>
           <div style="background:#F7F9FB;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px">
             <div style="font-size:11px;font-weight:700;color:#6B7A8D;text-transform:uppercase">📅 Prossimo appuntamento (opzionale)</div>
@@ -444,7 +444,7 @@ function renderDiario(p){
   renderTypePills();
 }
 
-function renderTypePills(){
+function renderTypePills(){updPayHint();
   document.getElementById('type-pills').innerHTML=Object.entries(ST).map(([k,v])=>`<button class="type-pill${k===sessType?' active':''}" style="${k===sessType?'background:'+v.bg+';color:'+v.color+';outline:2px solid '+v.color:''}" onclick="setType('${k}')">${v.icon} ${v.label}</button>`).join('');
 }
 function setType(t){sessType=t;renderTypePills()}
@@ -537,7 +537,7 @@ function saveSession(){
   const titolo=document.getElementById('sess-title').value.trim();
   const p=patients.find(x=>x.id===selId);if(!p)return;
   const n=sessType==='seduta'?countS(p.sessioni)+1:null;
-  const imp=parseFloat(document.getElementById('pay-importo').value)||0,full=document.getElementById('pay-full').checked,acc=parseFloat(document.getElementById('pay-acconto').value)||0,ver=full?imp:acc;
+  const {imp,ver,full}=payCalc();
   const pagamento=(imp||ver)?{importo:imp,versato:ver,pagato:full,metodo:document.getElementById('pay-metodo').value}:null;
   if(editSessId){const e=p.sessioni.find(x=>x.id===editSessId);if(e){e.tipo=sessType;e.titolo=titolo;e.testo=testo;e.pagamento=pagamento;if(sessType!=='seduta')e.numeroseduta=null}editSessId=null;document.getElementById('btn-save-sess').textContent='Salva'}
   else p.sessioni.push({id:Date.now(),data:new Date().toISOString(),tipo:sessType,titolo,testo,numeroseduta:n,pagamento});
@@ -585,6 +585,13 @@ function createAppts(p,date,ora,rep){p.appuntamenti=p.appuntamenti||[];const n=M
 function delAppt(pid,aid){const p=patients.find(x=>x.id===pid);if(!p||!confirm('Eliminare questo appuntamento?'))return;p.appuntamenti=(p.appuntamenti||[]).filter(a=>a.id!==aid);push(p);renderHome()}
 function addApptManual(){const p=patients.find(x=>x.id==document.getElementById('ap-pt').value),d=document.getElementById('ap-date').value;if(!p||!d)return alert('Scegli paziente e data');createAppts(p,d,document.getElementById('ap-time').value,document.getElementById('ap-rep').value);push(p);renderHome()}
 let editSessId=null,wkOff=3;
+function prevResiduo(){const p=patients.find(x=>x.id===selId);if(!p)return 0;let r=0;p.sessioni.forEach(s=>{if(s.id!==editSessId&&s.pagamento)r+=(s.pagamento.importo||0)-(s.pagamento.versato||0)});return Math.round(r*100)/100}
+function payCalc(){const prev=prevResiduo(),full=document.getElementById('pay-full').checked,acc=parseFloat(document.getElementById('pay-acconto').value)||0;let imp=parseFloat(document.getElementById('pay-importo').value)||0;
+  if(!imp&&!full&&acc>prev)imp=Math.round((acc-prev)*100)/100;
+  return{prev,imp,full,ver:full?imp:acc}}
+function updPayHint(){const h=document.getElementById('pay-hint');if(!h)return;const c=payCalc();
+  h.innerHTML='Residuo vecchie sedute: <b>'+eur(c.prev)+'</b>'+((c.imp||c.ver)?' → seduta di oggi <b>'+eur(c.imp)+'</b>, incassato <b>'+eur(c.ver)+'</b>, nuovo residuo <b>'+eur(Math.round((c.prev+c.imp-c.ver)*100)/100)+'</b>':'')}
+['pay-importo','pay-acconto','pay-full'].forEach(i=>{const e=document.getElementById(i);e.addEventListener('input',updPayHint);e.addEventListener('change',updPayHint)});
 function editSess(id){const p=patients.find(x=>x.id===selId),e=p&&p.sessioni.find(x=>x.id===id);if(!e)return;
   editSessId=id;sessType=e.tipo;resetPay();
   document.getElementById('sess-title').value=e.titolo||'';document.getElementById('sess-text').value=e.testo||'';
